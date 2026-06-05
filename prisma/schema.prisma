@@ -1,0 +1,80 @@
+// Schema espelha init.sql — a fonte da verdade do schema é o SQL.
+// Este arquivo serve apenas para gerar o cliente Prisma. NÃO usar `prisma migrate`.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(100)
+  email     String    @unique @db.VarChar(150)
+  city      String?   @db.VarChar(100)
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+
+  addresses Address[]
+  carts     Cart[]
+
+  @@index([city], map: "idx_users_city")
+  @@map("users")
+}
+
+model Address {
+  id      Int     @id @default(autoincrement())
+  userId  Int     @map("user_id")
+  street  String? @db.VarChar(200)
+  city    String? @db.VarChar(100)
+  state   String? @db.VarChar(50)
+  zipCode String? @map("zip_code") @db.VarChar(20)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_addresses_user_id")
+  @@map("addresses")
+}
+
+model Product {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(200)
+  category  String?   @db.VarChar(80)
+  price     Decimal   @db.Decimal(10, 2)
+  stock     Int?      @default(0)
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+
+  cartItems CartItem[]
+
+  @@index([category], map: "idx_products_category")
+  @@map("products")
+}
+
+model Cart {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@index([userId], map: "idx_carts_user_id")
+  @@map("carts")
+}
+
+model CartItem {
+  id        Int     @id @default(autoincrement())
+  cartId    Int     @map("cart_id")
+  productId Int     @map("product_id")
+  quantity  Int     @default(1)
+  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([cartId], map: "idx_cart_items_cart")
+  @@index([productId], map: "idx_cart_items_product")
+  @@map("cart_items")
+}

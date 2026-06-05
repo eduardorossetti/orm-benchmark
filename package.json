@@ -1,0 +1,39 @@
+{
+  "name": "orm-benchmark",
+  "version": "1.0.0",
+  "description": "Benchmark de desempenho: SQL puro (postgres.js) vs Drizzle ORM sobre PostgreSQL.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "db:up": "mkdir -p results/.snapshot && chmod 777 results/.snapshot && docker compose up -d --wait",
+    "db:down": "docker compose down -v",
+    "db:logs": "docker compose logs -f postgres",
+    "db:reset": "docker compose down -v && docker compose up -d --wait && npm run seed",
+    "seed": "node --env-file=.env seed.js",
+    "db:snapshot": "node --env-file=.env scripts/snapshot.js",
+    "db:reset-fast": "node --env-file=.env scripts/reset-fast.js",
+    "bench": "node --env-file=.env bench.js",
+    "bench:full": "node --env-file=.env bench.js sql --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js drizzle --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js prisma --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js prisma-query --iterations=200 --warmup=50 --csv",
+    "server": "node --env-file=.env server.js",
+    "analyze": "ANALYZE_MODE=1 node --env-file=.env analyze.js",
+    "loadtest": "k6 run k6/load.js",
+    "loadtest:matrix": "bash k6/matrix.sh",
+    "consolidate": "node consolidate.js",
+    "clean": "rm -rf results/k6/* results/explain/* results/*.csv results/consolidated.* logs/"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@faker-js/faker": "9.9.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.8.5",
+    "pg": "^8.20.0",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "prisma": "^7.8.0"
+  }
+}

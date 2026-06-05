@@ -1,0 +1,16 @@
+node_modules/
+.env
+*.log
+.claude/settings.local.json
+.vscode/
+.idea/
+*.swp
+.DS_Store
+results/.snapshot/
+results/*.csv
+results/consolidated.*
+results/k6/*
+results/explain/*
+!results/k6/.gitkeep
+!results/explain/.gitkeep
+references/
