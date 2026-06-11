@@ -4,7 +4,6 @@ import { scenarios } from './src/scenarios.js'
 import { sqlStrategy } from './src/strategies/sql.js'
 import { drizzleStrategy } from './src/strategies/drizzle.js'
 import { prismaStrategy } from './src/strategies/prisma.js'
-import { prismaQueryStrategy } from './src/strategies/prisma-query.js'
 import { runScenario } from './src/bench/runner.js'
 import { fmt } from './src/bench/stats.js'
 import { resetFast } from './src/db/snapshot.js'
@@ -13,7 +12,6 @@ const STRATEGIES = {
   sql:            sqlStrategy,
   drizzle:        drizzleStrategy,
   prisma:         prismaStrategy,
-  'prisma-query': prismaQueryStrategy,
 }
 
 const { values, positionals } = parseArgs({

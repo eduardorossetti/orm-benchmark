@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-STRATEGIES=(sql drizzle prisma prisma-query)
+STRATEGIES=(sql drizzle prisma)
 SCENARIOS=(
   select_by_id
   cart_detail
@@ -31,7 +31,7 @@ SCENARIOS=(
 VUS_LEVELS=(1 10 100)
 
 DURATION="${DURATION:-30s}"
-PORT="${PORT:-3000}"
+PORT="${PORT:-3004}"
 BASE_URL="http://localhost:${PORT}"
 OUT_DIR="${OUT_DIR:-results/k6}"
 # REPLICAS: número de execuções por (strategy × scenario × vus). N≥3 permite

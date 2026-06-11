@@ -6,7 +6,7 @@ faker.seed(Number(process.env.SEED ?? 12345))
 
 const STRATEGY = process.env.STRATEGY
 if (!STRATEGY) {
-  console.error('ERRO: env STRATEGY obrigatório (sql | drizzle | prisma | prisma-query)')
+  console.error('ERRO: env STRATEGY obrigatório (sql | drizzle | prisma)')
   process.exit(1)
 }
 
@@ -14,7 +14,6 @@ const STRATEGY_LOADERS = {
   sql:            () => import('./src/strategies/sql.js').then(m => m.sqlStrategy),
   drizzle:        () => import('./src/strategies/drizzle.js').then(m => m.drizzleStrategy),
   prisma:         () => import('./src/strategies/prisma.js').then(m => m.prismaStrategy),
-  'prisma-query': () => import('./src/strategies/prisma-query.js').then(m => m.prismaQueryStrategy),
 }
 
 const loader = STRATEGY_LOADERS[STRATEGY]
@@ -46,7 +45,7 @@ fastify.addHook('onClose', async () => {
   catch (err) { console.error(`cleanup ${STRATEGY}: ${err.message}`) }
 })
 
-const port = Number(process.env.PORT ?? 3000)
+const port = Number(process.env.PORT ?? 3004)
 
 try {
   await fastify.listen({ port, host: '0.0.0.0' })

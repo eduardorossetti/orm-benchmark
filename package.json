@@ -13,7 +13,7 @@
     "db:snapshot": "node --env-file=.env scripts/snapshot.js",
     "db:reset-fast": "node --env-file=.env scripts/reset-fast.js",
     "bench": "node --env-file=.env bench.js",
-    "bench:full": "node --env-file=.env bench.js sql --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js drizzle --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js prisma --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js prisma-query --iterations=200 --warmup=50 --csv",
+    "bench:full": "node --env-file=.env bench.js sql --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js drizzle --iterations=200 --warmup=50 --csv && node --env-file=.env bench.js prisma --iterations=200 --warmup=50 --csv",
     "server": "node --env-file=.env server.js",
     "analyze": "ANALYZE_MODE=1 node --env-file=.env analyze.js",
     "loadtest": "k6 run k6/load.js",

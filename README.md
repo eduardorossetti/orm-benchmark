@@ -1,4 +1,4 @@
-# Custo de Desempenho de ORMs em Consultas SELECT no PostgreSQL: uma comparação isolando a camada de abstração entre SQL puro, Drizzle e Prisma
+# Análise de Desempenho de ORMs em Consultas SELECT no PostgreSQL: uma comparação isolando a camada de abstração entre SQL puro, Drizzle e Prisma
 
 **Eduardo Rossetti dos Santos Melo**
 
@@ -9,13 +9,13 @@
 
 ## Resumo
 
-O Mapeamento Objeto-Relacional (ORM) é amplamente adotado para mediar a comunicação entre aplicações orientadas a objetos e bancos de dados relacionais, oferecendo conveniência de desenvolvimento ao custo de uma camada de abstração cujo impacto sobre o desempenho é frequentemente debatido, porém raramente isolado. Este trabalho compara o custo de desempenho de duas estratégias de ORM — Drizzle (query builder) e Prisma (ORM completo, em dois modos de carregamento de relações) — em relação ao acesso via SQL puro, restringindo-se a consultas SELECT sobre o PostgreSQL. Diferentemente de estudos anteriores, todas as estratégias compartilham o mesmo driver de banco (`pg`), de modo a isolar exclusivamente a camada de abstração e não o driver subjacente. A avaliação combina três camadas de medição — latência isolada (`bench.js`), latência sob carga concorrente (k6, com 1, 10 e 100 usuários virtuais) e análise de planos de execução (`EXPLAIN ANALYZE`) — sobre dez cenários representativos de três classes de consulta (simples, anti-padrão e analítica), em ambiente containerizado e com dados sintéticos determinísticos. Os resultados mostram que o overhead do ORM depende tanto da classe da consulta quanto do idioma adotado pela ferramenta: um query builder que emite SQL equivalente apresenta sobrecarga desprezível em consultas analíticas (≈1,2×), ao passo que um ORM que materializa o grafo de objetos em memória amplifica drasticamente sob carga, alcançando até 14× de sobrecarga em consultas analíticas com 100 usuários simultâneos. A análise de planos evidencia a causa: a decomposição de consultas em múltiplas requisições e o processamento de agregações na aplicação, em vez de no banco. Os achados auxiliam desenvolvedores na escolha consciente da estratégia de acesso a dados conforme o perfil de carga e o tipo de consulta predominante.
+O Mapeamento Objeto-Relacional (ORM) é amplamente adotado para mediar a comunicação entre aplicações orientadas a objetos e bancos de dados relacionais, oferecendo conveniência de desenvolvimento ao custo de uma camada de abstração cujo impacto sobre o desempenho é frequentemente debatido, porém raramente isolado. Este trabalho analisa o desempenho de duas abordagens de ORM — Drizzle (query builder) e Prisma (ORM completo) — em relação ao acesso via SQL puro, restringindo-se a consultas SELECT sobre o PostgreSQL. Diferentemente de estudos anteriores, todas as abordagens compartilham o mesmo driver de banco (`pg`), de modo a isolar exclusivamente a camada de abstração e não o driver subjacente. A avaliação combina três camadas de medição — latência isolada (`bench.js`), latência sob carga concorrente (k6, com 1, 10 e 100 usuários virtuais) e análise de planos de execução (`EXPLAIN ANALYZE`) — sobre dez cenários representativos de três classes de consulta (simples, anti-padrão e analítica), em ambiente containerizado e com dados sintéticos determinísticos. Os resultados mostram que a sobrecarga do ORM depende tanto da classe da consulta quanto do idioma adotado pela ferramenta: um query builder que emite SQL equivalente apresenta sobrecarga desprezível em consultas analíticas (≈1,2×), ao passo que um ORM que materializa o grafo de objetos em memória amplifica drasticamente sob carga, alcançando até 14× de sobrecarga em consultas analíticas com 100 usuários simultâneos. A análise de planos evidencia a causa: o processamento de agregações na aplicação, em vez de no banco. Os achados auxiliam desenvolvedores na escolha consciente da abordagem de acesso a dados conforme o perfil de carga e o tipo de consulta predominante.
 
 **Palavras-chave:** Mapeamento objeto-relacional; Desempenho; SQL; PostgreSQL; Node.js; Benchmark.
 
 ## Abstract
 
-Object-Relational Mapping (ORM) is widely adopted to bridge object-oriented applications and relational databases, offering development convenience at the cost of an abstraction layer whose performance impact is frequently debated yet rarely isolated. This work compares the performance cost of two ORM strategies — Drizzle (query builder) and Prisma (full ORM, in two relation-loading modes) — against raw SQL access, restricted to SELECT queries on PostgreSQL. Unlike prior studies, all strategies share the same database driver (`pg`), so as to isolate the abstraction layer exclusively rather than the underlying driver. The evaluation combines three measurement layers — isolated latency (`bench.js`), latency under concurrent load (k6, with 1, 10, and 100 virtual users), and execution-plan analysis (`EXPLAIN ANALYZE`) — across ten scenarios representing three query classes (simple, anti-pattern, and analytical), in a containerized environment with deterministic synthetic data. Results show that ORM overhead depends on both the query class and the idiom adopted by the tool: a query builder that emits equivalent SQL exhibits negligible overhead on analytical queries (≈1.2×), whereas an ORM that materializes the object graph in memory amplifies drastically under load, reaching up to 14× overhead on analytical queries with 100 concurrent users. Plan analysis reveals the cause: query decomposition into multiple requests and aggregation performed in the application rather than in the database. The findings help developers make an informed choice of data-access strategy according to the load profile and the predominant query type.
+Object-Relational Mapping (ORM) is widely adopted to bridge object-oriented applications and relational databases, offering development convenience at the cost of an abstraction layer whose performance impact is frequently debated yet rarely isolated. This work analyzes the performance of two ORM approaches — Drizzle (query builder) and Prisma (full ORM) — against raw SQL access, restricted to SELECT queries on PostgreSQL. Unlike prior studies, all approaches share the same database driver (`pg`), so as to isolate the abstraction layer exclusively rather than the underlying driver. The evaluation combines three measurement layers — isolated latency (`bench.js`), latency under concurrent load (k6, with 1, 10, and 100 virtual users), and execution-plan analysis (`EXPLAIN ANALYZE`) — across ten scenarios representing three query classes (simple, anti-pattern, and analytical), in a containerized environment with deterministic synthetic data. Results show that ORM overhead depends on both the query class and the idiom adopted by the tool: a query builder that emits equivalent SQL exhibits negligible overhead on analytical queries (≈1.2×), whereas an ORM that materializes the object graph in memory amplifies drastically under load, reaching up to 14× overhead on analytical queries with 100 concurrent users. Plan analysis reveals the cause: aggregation performed in the application rather than in the database. The findings help developers make an informed choice of data-access approach according to the load profile and the predominant query type.
 
 **Keywords:** Object-relational mapping; Performance; SQL; PostgreSQL; Node.js; Benchmark.
 
@@ -25,13 +25,13 @@ Object-Relational Mapping (ORM) is widely adopted to bridge object-oriented appl
 
 O Mapeamento Objeto-Relacional (*Object-Relational Mapping* — ORM) é um padrão consolidado para acesso a bancos de dados relacionais em sistemas orientados a objetos, permitindo que desenvolvedores manipulem dados por meio de construções da própria linguagem de programação, sem redigir manualmente as instruções em SQL (*Structured Query Language*) (NICOLETTI; MARÇAL, 2024). Sua principal vantagem é elevar o nível de abstração do acesso a dados: o foco do desenvolvimento desloca-se para o modelo de domínio, reduzindo o código repetitivo e facilitando a manutenção (OLIVEIRA et al., 2024). Não por acaso, ferramentas de ORM tornaram-se onipresentes no ecossistema de desenvolvimento *backend*, em particular no ambiente Node.js, onde bibliotecas como Prisma, Sequelize e Drizzle figuram entre os pacotes mais utilizados.
 
-Essa conveniência, contudo, não é gratuita. A introdução de uma camada de mediação entre a aplicação e o banco de dados decorre de uma incompatibilidade estrutural conhecida como impedância objeto-relacional (*object-relational impedance mismatch*): o modelo orientado a objetos é hierárquico e navegacional, enquanto o modelo relacional é declarativo e baseado em conjuntos (*set-based*), de modo que ambos representam e percorrem dados de maneiras fundamentalmente distintas (IRELAND et al., 2009; TEIXEIRA, 2017). Para transpor essa lacuna, ferramentas de ORM geram consultas SQL automaticamente a partir de chamadas de métodos, e é precisamente nessa tradução que reside o custo de desempenho: o desenvolvedor passa a exercer pouco controle sobre a qualidade e a eficiência das consultas produzidas (NICOLETTI; MARÇAL, 2024). A literatura documenta uma série de anti-padrões recorrentes em consultas geradas por ORM — como o problema N+1, em que uma operação é decomposta em uma sucessão de consultas linha a linha, e a busca ansiosa (*eager fetching*) de dados desnecessários —, todos manifestações da impedância nos níveis de paradigma e linguagem (COLLEY; STANIER; ASADUZZAMAN, 2020).
+Essa conveniência, contudo, não é gratuita. A introdução de uma camada de mediação entre a aplicação e o banco de dados decorre de uma incompatibilidade estrutural conhecida como impedância objeto-relacional (*object-relational impedance mismatch*): o modelo orientado a objetos é hierárquico e navegacional, enquanto o modelo relacional é declarativo e baseado em conjuntos (*set-based*), de modo que ambos representam e percorrem dados de maneiras fundamentalmente distintas (IRELAND et al., 2009; TEIXEIRA, 2017). Para transpor essa lacuna, ferramentas de ORM geram consultas SQL automaticamente a partir de chamadas de métodos, e é precisamente nessa tradução que reside a sobrecarga de desempenho: o desenvolvedor passa a exercer pouco controle sobre a qualidade e a eficiência das consultas produzidas (NICOLETTI; MARÇAL, 2024). A literatura documenta uma série de anti-padrões recorrentes em consultas geradas por ORM — como o problema N+1, em que uma operação é decomposta em uma sucessão de consultas linha a linha, e a busca ansiosa (*eager fetching*) de dados desnecessários —, todos manifestações da impedância nos níveis de paradigma e linguagem (COLLEY; STANIER; ASADUZZAMAN, 2020).
 
-Diversos estudos avaliaram empiricamente o desempenho de ORMs, e há consenso recorrente de que o acesso via SQL puro supera o acesso mediado por ORM em operações básicas (YUSMITA et al., 2025; COLLEY; STANIER; ASADUZZAMAN, 2020). Entretanto, três limitações enfraquecem a comparabilidade desses trabalhos. Primeiro, comparações que confrontam múltiplos ORMs frequentemente misturam o overhead da abstração com o overhead do *driver* de banco, pois cada ferramenta utiliza um driver distinto — um fator de confusão (*confounder*) que contamina a atribuição de causa. Segundo, boa parte dos estudos concentra-se em operações CRUD simples ou em médias agregadas, sem decompor o comportamento por classe de consulta nem investigar como a sobrecarga evolui sob carga concorrente. Terceiro, são raras as análises que recorrem ao plano de execução (*EXPLAIN ANALYZE*) como evidência causal do porquê de uma estratégia ser mais lenta que outra, limitando-se a reportar tempos sem explicá-los.
+Diversos estudos avaliaram empiricamente o desempenho de ORMs, e há consenso recorrente de que o acesso via SQL puro supera o acesso mediado por ORM em operações básicas (YUSMITA et al., 2025; COLLEY; STANIER; ASADUZZAMAN, 2020). Entretanto, três limitações enfraquecem a comparabilidade desses trabalhos. Primeiro, comparações que confrontam múltiplos ORMs frequentemente misturam a sobrecarga (*overhead*) da abstração com a do *driver* de banco, pois cada ferramenta utiliza um driver distinto — um fator de confusão (*confounder*) que contamina a atribuição de causa. Segundo, boa parte dos estudos concentra-se em operações CRUD simples ou em médias agregadas, sem decompor o comportamento por classe de consulta nem investigar como a sobrecarga evolui sob carga concorrente. Terceiro, são raras as análises que recorrem ao plano de execução (*EXPLAIN ANALYZE*) como evidência causal do porquê de uma estratégia ser mais lenta que outra, limitando-se a reportar tempos sem explicá-los.
 
-Este trabalho aborda essas lacunas comparando, de forma controlada, três estratégias de acesso a dados em consultas SELECT sobre o PostgreSQL: SQL puro (via *driver* `pg`), Drizzle (um *query builder*, que constrói SQL de forma programática sem mapear entidades) e Prisma (um ORM completo, avaliado em dois modos de carregamento de relações). A decisão metodológica central é submeter todas as estratégias ao **mesmo driver de banco** (`pg`), de maneira a isolar exclusivamente a camada de abstração e neutralizar o confound do driver presente em estudos anteriores. A avaliação articula-se em três camadas complementares de medição — latência isolada, latência sob carga concorrente com 1, 10 e 100 usuários virtuais, e análise de planos de execução —, aplicadas a dez cenários que cobrem três classes de consulta (simples, anti-padrão e analítica), em ambiente containerizado com geração sintética e determinística de dados, à maneira de Yusmita et al. (2025).
+Este trabalho aborda essas lacunas comparando, de forma controlada, três abordagens de acesso a dados em consultas SELECT sobre o PostgreSQL: SQL puro (via *driver* `pg`), Drizzle (um *query builder*, que constrói SQL de forma programática sem mapear entidades) e Prisma (um ORM completo). A decisão metodológica central é submeter todas as abordagens ao **mesmo driver de banco** (`pg`), de maneira a isolar exclusivamente a camada de abstração e neutralizar o confound do driver presente em estudos anteriores. A avaliação articula-se em três camadas complementares de medição — latência isolada, latência sob carga concorrente com 1, 10 e 100 usuários virtuais, e análise de planos de execução —, aplicadas a dez cenários que cobrem três classes de consulta (simples, anti-padrão e analítica), em ambiente containerizado com geração sintética e determinística de dados, à maneira de Yusmita et al. (2025).
 
-A pesquisa é norteada pela seguinte pergunta: *qual é o custo de desempenho de utilizar um ORM em vez de SQL puro em consultas SELECT no PostgreSQL, e de que modo esse custo varia conforme a classe da consulta e a carga concorrente?* A hipótese de trabalho é que a sobrecarga não é uniforme, mas depende tanto da classe da consulta quanto do idioma adotado pela ferramenta: espera-se que um *query builder* que emite SQL equivalente ao manual apresente sobrecarga modesta e estável, ao passo que um ORM que materializa o grafo de objetos em memória amplifique a sobrecarga sob carga, sobretudo em consultas analíticas e em anti-padrões. Os resultados confirmam essa hipótese e, mais que isso, identificam por meio dos planos de execução o mecanismo causal da degradação — a decomposição de consultas em múltiplas requisições e o deslocamento da agregação do banco para a aplicação.
+A pesquisa é norteada pela seguinte pergunta: *qual é a sobrecarga de desempenho de utilizar um ORM em vez de SQL puro em consultas SELECT no PostgreSQL, e de que modo essa sobrecarga varia conforme a classe da consulta e a carga concorrente?* A hipótese de trabalho é que a sobrecarga não é uniforme, mas depende tanto da classe da consulta quanto do idioma adotado pela ferramenta: espera-se que um *query builder* que emite SQL equivalente ao manual apresente sobrecarga modesta e estável, ao passo que um ORM que materializa o grafo de objetos em memória amplifique a sobrecarga sob carga, sobretudo em consultas analíticas e em anti-padrões. Os resultados confirmam essa hipótese e, mais que isso, identificam por meio dos planos de execução o mecanismo causal da degradação — o deslocamento da agregação do banco para a aplicação.
 
 O restante deste artigo está organizado como segue. A Seção 2 apresenta a fundamentação teórica sobre ORM e impedância objeto-relacional. A Seção 3 discute os trabalhos relacionados e posiciona a contribuição. A Seção 4 detalha a arquitetura experimental — ambiente, esquema de dados, cenários, métricas e o isolamento de processo adotado. A Seção 5 apresenta e discute os resultados, incluindo as ameaças à validade. Por fim, a Seção 6 traz as conclusões e os trabalhos futuros.
 
@@ -55,27 +55,31 @@ Justamente por gerar SQL automaticamente, ferramentas de ORM tendem a reproduzir
 
 No PostgreSQL, como em qualquer SGBD relacional, o SQL é declarativo: o otimizador baseado em custo decide *como* executar uma consulta, produzindo um plano de execução. O comando `EXPLAIN ANALYZE` executa efetivamente a consulta e reporta a estrutura do plano (varreduras de índice ou sequenciais, tipos de junção), os tempos reais de planejamento e execução e o consumo de *buffers*. Comparar o plano e o número de consultas emitidas por uma estratégia de ORM com os de uma consulta escrita manualmente permite explicar *por que* uma é mais lenta que a outra, indo além do mero registro de tempos — um instrumento pouco explorado nos estudos comparativos de desempenho de ORMs.
 
+### 2.5. As ferramentas avaliadas: Prisma e Drizzle
+
+No ecossistema Node.js, o Prisma figura entre os ORMs mais adotados para TypeScript e JavaScript (OLIVEIRA et al., 2024). Diferentemente dos ORMs clássicos baseados nos padrões *Active Record* ou *Data Mapper*, o Prisma define o modelo de dados em um arquivo de esquema próprio (`schema.prisma`), a partir do qual gera um cliente fortemente tipado, acessado por uma API declarativa de alto nível, que carrega relações aninhadas por junções laterais (*preview feature* `relationJoins`) (PRISMA, 2025). O Drizzle, por sua vez, é uma biblioteca mais recente e deliberadamente mais leve, classificada como *query builder*: oferece uma API tipada próxima da sintaxe do próprio SQL, sem mapear entidades de domínio nem manter um *runtime* de mediação, emitindo tipicamente uma única consulta por operação (DRIZZLE TEAM, 2025). Essa diferença de propósito — um ORM completo, que materializa o grafo de objetos, *versus* um *query builder*, que apenas constrói o SQL — é central para a interpretação dos resultados das Seções 5.2 e 5.3.
+
 ## 3. Trabalhos Relacionados
 
 A comparação de desempenho entre ORMs e SQL puro tem sido objeto de diversos estudos empíricos, com consenso recorrente de que o acesso direto supera o mediado por ORM. Yusmita et al. (2025) constituem a referência mais próxima deste trabalho: comparam SQL puro e o ORM Prisma sobre o PostgreSQL, em ambiente containerizado e com dados sintéticos gerados pela biblioteca *faker.js*, avaliando oito tipos de consulta por meio de um índice composto de tempo de execução, uso de CPU e memória e estabilidade; concluem que o SQL puro é até cinco vezes mais rápido e consome de seis a nove vezes menos CPU. Colley, Stanier e Asaduzzaman (2020) combinam uma pesquisa com administradores de banco e um experimento que confronta consultas escritas por especialista com as geradas pelo Django ORM, evidenciando anti-padrões e relatando um caso em que o ORM emite mais de mil consultas onde o SQL emprega uma única. No contexto brasileiro e em Node.js, Oliveira et al. (2024) comparam TypeORM, Prisma e Sequelize em operações CRUD sob carga gerada pelo k6, sobre um esquema de comércio eletrônico semelhante ao adotado aqui. No tocante à metodologia de avaliação sob carga, Couto et al. (2022) avaliam experimentalmente o PostgreSQL com usuários simultâneos e testes de estresse, incluindo uma análise de ameaças à validade que serve de referência. O rigor metodológico adotado apoia-se ainda em trabalhos de referência sobre *benchmarking* confiável (KALIBERA; JONES, 2013; BEYER; LÖWE; WENDLER, 2017; HASSELBRING, 2021).
 
-A Tabela 1 posiciona este trabalho frente aos estudos comparativos mais próximos. Três lacunas justificam a contribuição. Primeiro, estudos que comparam múltiplos ORMs frequentemente os apoiam em *drivers* distintos, confundindo o overhead da abstração com o do driver (OLIVEIRA et al., 2024); ao unificar o driver, isolamos exclusivamente a camada de abstração. Segundo, a maioria reporta médias agregadas ou restringe-se a operações CRUD, sem decompor o comportamento por classe de consulta nem observar sua evolução sob diferentes níveis de carga. Terceiro, são raras as análises que empregam o plano de execução como evidência causal das diferenças observadas.
+A Tabela 1 posiciona este trabalho frente aos estudos comparativos mais próximos. Três lacunas justificam a contribuição. Primeiro, estudos que comparam múltiplos ORMs frequentemente os apoiam em *drivers* distintos, confundindo a sobrecarga da abstração com a do driver (OLIVEIRA et al., 2024); ao unificar o driver, isolamos exclusivamente a camada de abstração. Segundo, a maioria reporta médias agregadas ou restringe-se a operações CRUD, sem decompor o comportamento por classe de consulta nem observar sua evolução sob diferentes níveis de carga. Terceiro, são raras as análises que empregam o plano de execução como evidência causal das diferenças observadas.
 
 **Tabela 1 – Posicionamento frente aos trabalhos relacionados**
 
-| Trabalho | Estratégias comparadas | Banco | Carga concorrente | Driver unificado | Plano de execução | Por classe de consulta |
+| Trabalho | Abordagens comparadas | Banco | Carga concorrente | Driver unificado | Plano de execução | Por classe de consulta |
 |---|---|---|---|---|---|---|
 | Yusmita et al. (2025) | SQL puro vs Prisma | PostgreSQL | Não (execução sequencial) | — (1 ORM) | Não | Parcial (8 tipos) |
 | Colley et al. (2020) | SQL (especialista) vs Django ORM | SQL Server | Não | — (1 ORM) | Sim | Sim (5 objetivos) |
 | Oliveira et al. (2024) | TypeORM, Prisma, Sequelize | PostgreSQL | Sim (k6) | Não (drivers distintos) | Não | Não (apenas CRUD) |
 | Couto et al. (2022) | — (apenas o SGBD) | PostgreSQL | Sim (JMeter) | Não | n/a | Parcial (leitura/escrita) |
-| **Este trabalho** | SQL puro, Drizzle, Prisma (2 modos) | PostgreSQL | Sim (k6: 1/10/100 VU) | **Sim (`pg`)** | **Sim (ANALYZE + contagem)** | **Sim (3 classes)** |
+| **Este trabalho** | SQL puro, Drizzle, Prisma | PostgreSQL | Sim (k6: 1/10/100 VU) | **Sim (`pg`)** | **Sim (ANALYZE + contagem)** | **Sim (3 classes)** |
 
 Fonte: elaboração própria.
 
 ## 4. Arquitetura Experimental
 
-Esta seção descreve a arquitetura experimental adotada para avaliar o custo de desempenho das estratégias de acesso a dados. O delineamento privilegia a reprodutibilidade e o isolamento de variáveis: o ambiente é integralmente containerizado, os dados são gerados de forma determinística e cada estratégia é medida em isolamento de processo, conforme detalhado a seguir.
+Esta seção descreve a arquitetura experimental adotada para avaliar o desempenho das abordagens de acesso a dados. O delineamento privilegia a reprodutibilidade e o isolamento de variáveis: o ambiente é integralmente containerizado, os dados são gerados de forma determinística e cada abordagem é medida em isolamento de processo, conforme detalhado a seguir.
 
 ### 4.1. Ambiente de testes
 
@@ -83,7 +87,7 @@ Os experimentos foram executados em uma única máquina, de modo a eliminar a va
 
 ### 4.2. Esquema relacional e geração de dados
 
-O esquema de dados reproduz um domínio de comércio eletrônico, composto por cinco tabelas relacionadas: `users`, `addresses`, `products`, `carts` e `cart_items`, conforme o modelo entidade-relacionamento da Figura 1. As relações incluem chaves estrangeiras com integridade referencial (e exclusão em cascata) e índices secundários sobre as colunas mais consultadas (cidade do usuário, categoria do produto e as chaves estrangeiras de carrinhos e itens). O esquema é definido por um *script* SQL único, que constitui a fonte da verdade; o modelo do Prisma e o esquema do Drizzle apenas o espelham, sem recorrer a migrações automáticas, de modo a garantir que as três estratégias operem sobre estruturas idênticas.
+O esquema de dados reproduz um domínio de comércio eletrônico, composto por cinco tabelas relacionadas: `users`, `addresses`, `products`, `carts` e `cart_items`, conforme o modelo entidade-relacionamento da Figura 1. As relações incluem chaves estrangeiras com integridade referencial (e exclusão em cascata) e índices secundários sobre as colunas mais consultadas (cidade do usuário, categoria do produto e as chaves estrangeiras de carrinhos e itens). O esquema é definido por um *script* SQL único, que constitui a fonte da verdade; o modelo do Prisma e o esquema do Drizzle apenas o espelham, sem recorrer a migrações automáticas, de modo a garantir que as três abordagens operem sobre estruturas idênticas.
 
 **Figura 1 – Modelo entidade-relacionamento do esquema**
 
@@ -95,26 +99,25 @@ Os dados foram gerados sinteticamente com a biblioteca *faker.js*, semeada com u
 
 Entre cada medição, o estado do banco é restaurado a partir de um *snapshot* em formato CSV (via `TRUNCATE … RESTART IDENTITY CASCADE` seguido de `COPY`, `ANALYZE` e `CHECKPOINT`), prática padrão em *benchmarks* de banco de dados para garantir que cada execução parta de um estado idêntico e controlado.
 
-### 4.3. Estratégias avaliadas
+### 4.3. Abordagens avaliadas
 
-Foram avaliadas quatro estratégias de acesso a dados, todas operando sobre o **mesmo driver** `pg` (node-postgres). Essa uniformização é a decisão metodológica central do trabalho: ao manter o driver constante, isola-se exclusivamente o custo da camada de abstração, neutralizando o fator de confusão presente em estudos que comparam ORMs apoiados em drivers distintos. A Tabela 2 resume as estratégias.
+Foram avaliadas três abordagens de acesso a dados, todas operando sobre o **mesmo driver** `pg` (node-postgres). Essa uniformização é a decisão metodológica central do trabalho: ao manter o driver constante, isola-se exclusivamente o custo da camada de abstração, neutralizando o fator de confusão presente em estudos que comparam ORMs apoiados em drivers distintos. A Tabela 2 resume as abordagens, cujos conceitos foram apresentados na Seção 2.5.
 
-**Tabela 2 – Estratégias de acesso a dados avaliadas**
+**Tabela 2 – Abordagens de acesso a dados avaliadas**
 
-| Estratégia | Tipo | Biblioteca | Caminho de acesso |
+| Abordagem | Tipo | Biblioteca | Caminho de acesso |
 |---|---|---|---|
 | `sql` | Driver direto (SQL puro) | pg 8.20 | `pool.query` com SQL e parâmetros (`$1, $2, …`) |
 | `drizzle` | *Query builder* | Drizzle 0.45.2 | API programática que emite uma única consulta SQL |
 | `prisma` | ORM completo (idiomático) | Prisma 7.8 | API declarativa; com `relationJoins`, carrega relações por *LATERAL JOIN* |
-| `prisma-query` | ORM completo (modo legado) | Prisma 7.8 | idem, forçando o carregamento de relações por consultas separadas |
 
 Fonte: elaboração própria.
 
-A estratégia `sql` representa o limite inferior de sobrecarga (acesso direto ao driver). O Drizzle é um *query builder*: constrói SQL de forma programática, sem mapear entidades de domínio, e emite uma única consulta por operação. O Prisma é um ORM completo; avaliou-se sua versão idiomática (`prisma`), sem recurso a SQL bruto — para consultas que sua API declarativa não expressa nativamente, recorreu-se ao caminho natural da ferramenta, qual seja, recuperar os registros e processá-los na aplicação. Com a *preview feature* `relationJoins` habilitada, o Prisma carrega relações aninhadas por *LATERAL JOIN* em uma única consulta. A quarta estratégia, `prisma-query`, força o modo de carregamento legado (`relationLoadStrategy: 'query'`), no qual cada relação dispara uma consulta separada — permitindo contrastar, na mesma ferramenta, os dois mecanismos de carregamento.
+A abordagem `sql` representa o limite inferior de sobrecarga (acesso direto ao driver). O Drizzle é um *query builder*: constrói SQL de forma programática, sem mapear entidades de domínio, e emite uma única consulta por operação. O Prisma é um ORM completo; avaliou-se sua versão idiomática (`prisma`), sem recurso a SQL bruto — para consultas que sua API declarativa não expressa nativamente, recorreu-se ao caminho natural da ferramenta, qual seja, recuperar os registros e processá-los na aplicação. Com a *preview feature* `relationJoins` habilitada, o Prisma carrega relações aninhadas por *LATERAL JOIN* em uma única consulta.
 
 ### 4.4. Cenários e classes de consulta
 
-A avaliação cobre dez cenários de consulta SELECT, agrupados em três classes que representam perfis distintos de acesso a dados (Tabela 2). As consultas de **escrita foram deliberadamente excluídas** do escopo, pois nelas o custo do ORM mistura-se à divergência da primitiva expressável (por exemplo, atualização em massa em uma consulta versus *N* atualizações em transação), o que confunde a atribuição do overhead à camada de abstração; além disso, operações de escrita produzem planos de execução triviais, pouco informativos para a análise causal pretendida. Cada cenário foi implementado de forma idiomática em todas as estratégias, e sua equivalência semântica foi verificada automaticamente antes da coleta (comparando contagem de linhas, identificadores e agregados, tomando o SQL puro como referência).
+A avaliação cobre dez cenários de consulta SELECT, agrupados em três classes que representam perfis distintos de acesso a dados (Tabela 3). As consultas de **escrita foram deliberadamente excluídas** do escopo, pois nelas o custo do ORM mistura-se à divergência da primitiva expressável (por exemplo, atualização em massa em uma consulta versus *N* atualizações em transação), o que confunde a atribuição da sobrecarga à camada de abstração; além disso, operações de escrita produzem planos de execução triviais, pouco informativos para a análise causal pretendida. Cada cenário foi implementado de forma idiomática em todas as abordagens, e sua equivalência semântica foi verificada automaticamente antes da coleta (comparando contagem de linhas, identificadores e agregados, tomando o SQL puro como referência).
 
 **Tabela 3 – Cenários por classe de consulta**
 
@@ -133,7 +136,7 @@ A avaliação cobre dez cenários de consulta SELECT, agrupados em três classes
 
 Fonte: elaboração própria.
 
-As consultas simples representam o caso de menor custo no banco, no qual a sobrecarga da camada de abstração tende a ser proporcionalmente mais visível. Os anti-padrões contrastam, propositadamente, uma implementação deficiente (`n_plus_one`, com 100 consultas seriais) com sua forma equivalente em consulta única (`eager_join`), permitindo observar como cada estratégia se comporta diante de um padrão reconhecidamente custoso. As consultas analíticas exercitam recursos do SQL — junções de múltiplas tabelas, agregações compostas, subconsultas escalares e funções de janela —, nos quais o tempo de processamento do banco é maior e, em princípio, dominante.
+As consultas simples representam o caso de menor custo no banco, no qual a sobrecarga da camada de abstração tende a ser proporcionalmente mais visível. Os anti-padrões contrastam, propositadamente, uma implementação deficiente (`n_plus_one`, com 100 consultas seriais) com sua forma equivalente em consulta única (`eager_join`), permitindo observar como cada abordagem se comporta diante de um padrão reconhecidamente custoso. As consultas analíticas exercitam recursos do SQL — junções de múltiplas tabelas, agregações compostas, subconsultas escalares e funções de janela —, nos quais o tempo de processamento do banco é maior e, em princípio, dominante.
 
 ### 4.5. Métricas e protocolo de medição
 
@@ -141,40 +144,59 @@ A avaliação articula-se em três camadas complementares de medição, de modo 
 
 **Camada 1 — Latência isolada.** Mede-se o tempo de execução de cada cenário em um processo Node dedicado, sem servidor HTTP, executando 200 iterações medidas precedidas de 50 iterações de aquecimento (*warmup*) descartadas, com o banco restaurado entre cenários. Reporta-se a mediana e o 95º percentil, em consonância com a recomendação de privilegiar a mediana em medições de desempenho sujeitas a ruído (KALIBERA; JONES, 2013). Essa camada estabelece a latência de referência, livre de efeitos de concorrência.
 
-**Camada 2 — Latência sob carga.** Cada estratégia é exposta por um servidor HTTP (Fastify) e submetida a carga concorrente gerada pelo k6, em três níveis de usuários virtuais simultâneos (1, 10 e 100 VUs), por 30 segundos cada. Para permitir a estimativa de dispersão entre execuções, cada combinação (estratégia × cenário × nível de VU) foi repetida em **três réplicas**, totalizando uma matriz de 4 × 10 × 3 × 3 = 360 execuções; reporta-se a mediana entre réplicas. Registram-se a latência (p50, p95), a vazão (requisições por segundo) e a taxa de erro, com um limiar de aceitação de menos de 1% de falhas.
+**Camada 2 — Latência sob carga.** Cada abordagem é exposta por um servidor HTTP (Fastify) e submetida a carga concorrente gerada pelo k6, em três níveis de usuários virtuais simultâneos (1, 10 e 100 VUs), por 30 segundos cada. Para permitir a estimativa de dispersão entre execuções, cada combinação (abordagem × cenário × nível de VU) foi repetida em **três réplicas**, totalizando uma matriz de 3 × 10 × 3 × 3 = 270 execuções; reporta-se a mediana entre réplicas. Registram-se a latência (p50, p95), a vazão (*throughput*, em requisições por segundo) e a taxa de erro, com um limiar de aceitação de menos de 1% de falhas.
 
-**Camada 3 — Análise de planos.** Para investigar a *causa* das diferenças de desempenho, captura-se o SQL efetivamente emitido por cada estratégia (por interceptação do driver) e executa-se `EXPLAIN (ANALYZE, BUFFERS)` sobre cada consulta, reportando o tempo de planejamento e de execução no banco, bem como o **número de consultas** disparadas por operação. Essa última métrica é decisiva para evidenciar anti-padrões como a decomposição de uma operação em múltiplas consultas (COLLEY; STANIER; ASADUZZAMAN, 2020).
+**Camada 3 — Análise de planos.** Para investigar a *causa* das diferenças de desempenho, captura-se o SQL efetivamente emitido por cada abordagem (por interceptação do driver) e executa-se `EXPLAIN (ANALYZE, BUFFERS)` sobre cada consulta, reportando o tempo de planejamento e de execução no banco, bem como o **número de consultas** disparadas por operação. Essa última métrica é decisiva para evidenciar anti-padrões como a decomposição de uma operação em múltiplas consultas (COLLEY; STANIER; ASADUZZAMAN, 2020).
 
 A métrica primária de comparação é a **razão de sobrecarga** (*overhead ratio*) entre cada ORM e o SQL puro (ORM/SQL); valores acima de 1× indicam que o ORM é mais lento. Para sumarizar por classe de consulta, utiliza-se a média geométrica das razões, mais apropriada do que a média aritmética para agregar fatores multiplicativos.
 
 ### 4.6. Isolamento de processo
 
-Em testes preliminares, observou-se que carregar múltiplas estratégias em um mesmo processo Node introduzia viés sistemático sob carga concorrente: a estratégia baseada no driver puro sofria degradação substancialmente maior do que as demais, atribuível à contenção difusa no laço de eventos (*event loop*) de thread única quando múltiplos *pools* de conexão e bibliotecas de cliente operam em paralelo. Para mitigar esse efeito, **cada estratégia executa em um processo Node dedicado** durante o seu bloco de medição. Ademais, na matriz de carga o servidor é reiniciado a cada combinação (estratégia × cenário × nível de VU), de modo a impedir a contaminação cruzada entre cenários por meio de um *pool* de conexões eventualmente degradado. Esse cuidado corresponde diretamente ao requisito de *isolamento das execuções individuais* apontado como indispensável para benchmarks confiáveis (BEYER; LÖWE; WENDLER, 2017), e constitui, em si, um diferencial metodológico em relação a estudos que não controlam essa fonte de viés.
+Em testes preliminares, observou-se que carregar múltiplas abordagens em um mesmo processo Node introduzia viés sistemático sob carga concorrente: a abordagem baseada no driver puro sofria degradação substancialmente maior do que as demais, atribuível à contenção difusa no laço de eventos (*event loop*) de thread única quando múltiplos *pools* de conexão e bibliotecas de cliente operam em paralelo. Para mitigar esse efeito, **cada abordagem executa em um processo Node dedicado** durante o seu bloco de medição. Ademais, na matriz de carga o servidor é reiniciado a cada combinação (abordagem × cenário × nível de VU), de modo a impedir a contaminação cruzada entre cenários por meio de um *pool* de conexões eventualmente degradado. Esse cuidado corresponde diretamente ao requisito de *isolamento das execuções individuais* apontado como indispensável para benchmarks confiáveis (BEYER; LÖWE; WENDLER, 2017), e constitui, em si, um diferencial metodológico em relação a estudos que não controlam essa fonte de viés.
 
 ## 5. Resultados e Discussão
 
-A matriz completa compreendeu 360 execuções de carga, além das medições de latência isolada e da análise de planos para as quarenta combinações de estratégia e cenário. A verificação de integridade das execuções foi satisfatória: das 360 células, 359 transcorreram sem qualquer falha de requisição; a única exceção é discutida na Seção 5.5 e constitui um artefato estatístico, não uma falha de medição. Os resultados são organizados das três camadas de medição para a evidência causal: primeiro a latência isolada (5.1), depois o comportamento sob carga (5.2), em seguida a explicação dos planos de execução (5.3) e, por fim, o efeito do modo de carregamento de relações (5.4).
+A matriz completa compreendeu 270 execuções de carga, além das medições de latência isolada e da análise de planos para as trinta combinações de abordagem e cenário. A verificação de integridade das execuções foi satisfatória: das 270 células, 269 transcorreram sem qualquer falha de requisição; a única exceção é discutida na Seção 5.4 e constitui um artefato estatístico, não uma falha de medição. Os resultados são organizados das três camadas de medição para a evidência causal: primeiro a latência isolada (5.1), depois o comportamento sob carga (5.2) e, em seguida, a explicação dos planos de execução (5.3).
 
 ### 5.1. Latência isolada
 
-Na medição isolada (`bench.js`), o Drizzle mantém-se muito próximo do SQL puro em todas as classes: a sobrecarga é modesta nas consultas simples (1,38× em `select_by_id`; 1,40× em `cart_detail`) e praticamente desaparece nas analíticas, chegando a empatar com o SQL nos cenários em que o tempo do banco domina (0,99× em `revenue_by_city_and_category`; 1,00× em `browse_catalog_paginated`). Esse comportamento é coerente com a natureza de um *query builder*, que emite uma consulta SQL equivalente à manual.
+A Tabela 4 reúne a latência isolada (`bench.js`): a mediana do SQL puro, em milissegundos, e a sobrecarga de cada ORM expressa como razão em relação a ela (×SQL). Os valores tornam imediato o contraste discutido a seguir — o Drizzle rente à paridade, o Prisma destacando-se nos anti-padrões e nas analíticas com agregação.
 
-O Prisma, por outro lado, já revela sobrecarga apreciável mesmo sem concorrência. Em consultas simples o custo é contido (1,56×–1,88×), mas cresce de forma acentuada no anti-padrão `eager_join` (6,02×) e nas analíticas que envolvem agregação — 3,87× em `revenue_by_city_and_category`, 3,12× em `users_above_avg_spending` e 2,39× em `frequently_bought_together`. Já em analíticas sem agregação na aplicação, como `products_never_sold` (1,16×), o Prisma permanece próximo do SQL. Esse contraste antecipa o mecanismo causal detalhado na Seção 5.3.
+**Tabela 4 – Latência isolada (`bench.js`): mediana do SQL puro e sobrecarga dos ORMs (×SQL) por cenário**
+
+| Classe | Cenário | SQL p50 (ms) | Drizzle | Prisma |
+|---|---|---|---|---|
+| Simples | `select_by_id` | 0,107 | 1,67× | 2,04× |
+| Simples | `cart_detail` | 0,157 | 1,56× | 1,63× |
+| Anti-padrão | `n_plus_one` | 9,248 | 1,14× | 1,49× |
+| Anti-padrão | `eager_join` | 0,593 | 2,47× | 6,06× |
+| Analítica | `revenue_by_city_and_category` | 75,78 | 1,02× | 3,86× |
+| Analítica | `recent_carts_7d` | 0,904 | 1,21× | 3,90× |
+| Analítica | `frequently_bought_together` | 0,360 | 1,27× | 2,38× |
+| Analítica | `products_never_sold` | 0,723 | 1,11× | 1,18× |
+| Analítica | `browse_catalog_paginated` | 4,011 | 1,00× | 1,03× |
+| Analítica | `users_above_avg_spending` | 27,32 | 1,09× | 3,22× |
+
+Fonte: elaboração própria.
+
+Na medição isolada (`bench.js`), o Drizzle mantém-se muito próximo do SQL puro em todas as classes: a sobrecarga é modesta nas consultas simples (1,67× em `select_by_id`; 1,56× em `cart_detail`) e praticamente desaparece nas analíticas, chegando a empatar com o SQL nos cenários em que o tempo do banco domina (1,02× em `revenue_by_city_and_category`; 1,00× em `browse_catalog_paginated`). Esse comportamento é coerente com a natureza de um *query builder*, que emite uma consulta SQL equivalente à manual.
+
+O Prisma, por outro lado, já revela sobrecarga apreciável mesmo sem concorrência. Em consultas simples o custo é contido (1,63×–2,04×), mas cresce de forma acentuada no anti-padrão `eager_join` (6,06×) e nas analíticas que envolvem agregação — 3,86× em `revenue_by_city_and_category`, 3,22× em `users_above_avg_spending` e 2,38× em `frequently_bought_together`. Já em analíticas sem agregação na aplicação, como `products_never_sold` (1,18×), o Prisma permanece próximo do SQL. Esse contraste antecipa o mecanismo causal detalhado na Seção 5.3.
 
 ### 5.2. Latência sob carga
 
-Sob carga concorrente, o padrão observado isoladamente amplifica-se, e de modo desigual entre as ferramentas. A Tabela 4 sintetiza a sobrecarga média (média geométrica das razões ORM/SQL) por classe de consulta e nível de carga; a Figura 2 traça a trajetória dessa sobrecarga ao longo dos três níveis de carga, e a Figura 3 apresenta a vazão por cenário sob 100 usuários virtuais.
+Sob carga concorrente, o padrão observado isoladamente amplifica-se, e de modo desigual entre as ferramentas. A Tabela 5 sintetiza a sobrecarga média (média geométrica das razões ORM/SQL) por classe de consulta e nível de carga; a Figura 2 traça a trajetória dessa sobrecarga ao longo dos três níveis de carga, e a Figura 3 apresenta a vazão por cenário sob 100 usuários virtuais.
 
-**Tabela 4 – Sobrecarga média (geomean ORM/SQL do p50) por classe de consulta e carga**
+**Tabela 5 – Sobrecarga média (geomean ORM/SQL do p50) por classe de consulta e carga**
 
-| Estratégia / classe | bench | k6 @ 1 VU | k6 @ 10 VU | k6 @ 100 VU |
+| Abordagem / classe | bench | k6 @ 1 VU | k6 @ 10 VU | k6 @ 100 VU |
 |---|---|---|---|---|
-| Drizzle — simples | 1,39× | 1,22× | 1,82× | 1,58× |
-| Drizzle — anti-padrão | 1,96× | 1,70× | 3,03× | 3,31× |
-| Drizzle — analítica | 1,08× | 1,04× | 1,08× | 1,17× |
-| Prisma — simples | 1,71× | 1,39× | 2,48× | 1,84× |
-| Prisma — anti-padrão | 3,31× | 2,90× | 3,69× | 3,84× |
-| Prisma — analítica | 2,27× | 2,03× | 4,47× | 4,06× |
+| Drizzle — simples | 1,61× | 1,12× | 1,80× | 1,57× |
+| Drizzle — anti-padrão | 1,68× | 1,81× | 3,19× | 3,63× |
+| Drizzle — analítica | 1,11× | 1,13× | 1,24× | 1,29× |
+| Prisma — simples | 1,82× | 1,31× | 2,56× | 1,96× |
+| Prisma — anti-padrão | 3,01× | 3,08× | 4,00× | 4,07× |
+| Prisma — analítica | 2,28× | 2,16× | 4,96× | 4,26× |
 
 Fonte: elaboração própria.
 
@@ -184,42 +206,42 @@ Fonte: elaboração própria.
 
 Fonte: elaboração própria.
 
-A Figura 2 torna visível o achado central: as duas analíticas seguem trajetórias opostas. A do Drizzle (linha pontilhada) permanece rente à paridade com o SQL em qualquer carga (de 1,04× a 1,17×), ao passo que a do Prisma escala de 2,03× (1 VU) para 4,47× (10 VUs). As consultas simples de ambas as ferramentas formam um arco — sobem de 1 para 10 VUs e recuam a 100 VUs, quando o tempo do banco passa a dominar —, enquanto o anti-padrão cresce de forma monotônica com a carga nas duas ferramentas.
+A Figura 2 torna visível o achado central: as duas analíticas seguem trajetórias opostas. A do Drizzle (linha pontilhada) permanece rente à paridade com o SQL em qualquer carga (de 1,13× a 1,29×), ao passo que a do Prisma escala de 2,16× (1 VU) para 4,96× (10 VUs). As consultas simples de ambas as ferramentas formam um arco — sobem de 1 para 10 VUs e recuam a 100 VUs, quando o tempo do banco passa a dominar —, enquanto o anti-padrão cresce de forma monotônica com a carga nas duas ferramentas.
 
-**Figura 3 – Vazão (req/s) sob 100 usuários virtuais simultâneos, por cenário e estratégia**
+**Figura 3 – Vazão (req/s) sob 100 usuários virtuais simultâneos, por cenário e abordagem**
 
 ![Vazão por cenário sob 100 VUs](figures/vazao_100vu.png)
 
 Fonte: elaboração própria.
 
-Três observações sobressaem. Primeiro, o Drizzle preserva sobrecarga desprezível nas consultas analíticas mesmo sob carga máxima (1,17× em média a 100 VUs), confirmando que, quando o ORM emite o mesmo SQL, o custo da abstração dilui-se à medida que o tempo do banco domina. Segundo, o Prisma exibe o oposto na mesma classe: a sobrecarga analítica salta de 2,03× (1 VU) para 4,47× (10 VUs), e os casos extremos são drásticos — sob 100 VUs, a razão Prisma/SQL atinge **12,46× em `revenue_by_city_and_category`** (5 contra 105 req/s) e **13,82× em `users_above_avg_spending`** (14 contra 268 req/s), como se observa nas barras truncadas da Figura 3. Terceiro, no anti-padrão ambas as ferramentas amplificam sob carga (3,31× para o Drizzle e 3,84× para o Prisma a 100 VUs), o que indica que o ORM **não corrige** um padrão deficiente como o N+1 — ao contrário, agrava-o, por pagar o custo da abstração a cada uma das consultas seriais.
+Três observações sobressaem. Primeiro, o Drizzle preserva sobrecarga desprezível nas consultas analíticas mesmo sob carga máxima (1,29× em média a 100 VUs), confirmando que, quando o ORM emite o mesmo SQL, o custo da abstração dilui-se à medida que o tempo do banco domina. Segundo, o Prisma exibe o oposto na mesma classe: a sobrecarga analítica salta de 2,16× (1 VU) para 4,96× (10 VUs), e os casos extremos são drásticos — sob 100 VUs, a razão Prisma/SQL atinge **12,73× em `revenue_by_city_and_category`** (5 contra 111 req/s) e **14,43× em `users_above_avg_spending`** (14 contra 284 req/s), como se observa nas barras truncadas da Figura 3. Terceiro, no anti-padrão ambas as ferramentas amplificam sob carga (3,63× para o Drizzle e 4,07× para o Prisma a 100 VUs), o que indica que o ORM **não corrige** um padrão deficiente como o N+1 — ao contrário, agrava-o, por pagar o custo da abstração a cada uma das consultas seriais.
 
 Esses resultados sustentam e refinam a hipótese do trabalho: a sobrecarga do ORM não é uniforme, mas depende **tanto da classe da consulta quanto do idioma da ferramenta**. Um *query builder* que delega a computação ao banco tem custo desprezível justamente onde mais importa em cargas analíticas; um ORM que materializa o grafo de objetos na aplicação inverte essa propriedade e degrada sob carga.
 
 ### 5.3. Evidência causal: planos de execução
 
-A análise dos planos de execução explica os números acima. A Tabela 5 mostra o número de consultas SQL efetivamente emitidas por estratégia em cada cenário.
+A análise dos planos de execução explica os números acima. A Tabela 6 mostra o número de consultas SQL efetivamente emitidas por abordagem em cada cenário.
 
-**Tabela 5 – Número de consultas SQL emitidas por operação (EXPLAIN)**
+**Tabela 6 – Número de consultas SQL emitidas por operação (EXPLAIN)**
 
-| Cenário | `sql` | `drizzle` | `prisma` | `prisma-query` |
-|---|---|---|---|---|
-| select_by_id | 1 | 1 | 1 | 1 |
-| cart_detail | 1 | 1 | 1 | 2 |
-| n_plus_one | 100 | 100 | 100 | 100 |
-| eager_join | 1 | 1 | 1 | 3 |
-| revenue_by_city_and_category | 1 | 1 | 1 | 7 |
-| recent_carts_7d | 1 | 1 | 1 | 3 |
-| frequently_bought_together | 1 | 1 | 2 | 3 |
-| products_never_sold | 1 | 1 | 1 | 1 |
-| browse_catalog_paginated | 1 | 1 | 2 | 2 |
-| users_above_avg_spending | 1 | 1 | 2 | 2 |
+| Cenário | `sql` | `drizzle` | `prisma` |
+|---|---|---|---|
+| select_by_id | 1 | 1 | 1 |
+| cart_detail | 1 | 1 | 1 |
+| n_plus_one | 100 | 100 | 100 |
+| eager_join | 1 | 1 | 1 |
+| revenue_by_city_and_category | 1 | 1 | 1 |
+| recent_carts_7d | 1 | 1 | 1 |
+| frequently_bought_together | 1 | 1 | 2 |
+| products_never_sold | 1 | 1 | 1 |
+| browse_catalog_paginated | 1 | 1 | 2 |
+| users_above_avg_spending | 1 | 1 | 2 |
 
 Fonte: elaboração própria.
 
-O SQL puro e o Drizzle emitem exatamente **uma** consulta por operação em todos os cenários (exceto o `n_plus_one`, deficiente por construção em qualquer estratégia), e os planos são estruturalmente idênticos — o que explica por que o Drizzle acompanha o SQL puro tão de perto. A degradação analítica do Prisma idiomático, contudo, **não** decorre de decomposição em múltiplas consultas: com `relationJoins`, ele emite uma única consulta com *LATERAL JOIN*. A causa é outra: em cenários como `revenue_by_city_and_category` e `users_above_avg_spending`, a API declarativa do Prisma não expressa a agregação composta (somas de produtos, médias de somas, contagens distintas), de modo que o caminho idiomático recupera **todos** os registros pertinentes (dezenas de milhares de linhas) e realiza a agregação em JavaScript, em vez de delegá-la ao banco. Sob concorrência, esse processamento na aplicação — somado à serialização do grande volume de dados — satura o laço de eventos, produzindo a latência de mais de 11 segundos observada a 100 VUs. É um mecanismo distinto, porém complementar, do clássico anti-padrão de decomposição em *N* consultas relatado na literatura, em que um ORM chega a emitir mais de mil consultas onde o SQL emprega uma (COLLEY; STANIER; ASADUZZAMAN, 2020).
+O SQL puro e o Drizzle emitem exatamente **uma** consulta por operação em todos os cenários (exceto o `n_plus_one`, deficiente por construção em qualquer abordagem), e os planos são estruturalmente idênticos — o que explica por que o Drizzle acompanha o SQL puro tão de perto. A degradação analítica do Prisma idiomático, contudo, **não** decorre de decomposição em múltiplas consultas: com `relationJoins`, ele emite uma única consulta com *LATERAL JOIN*. A causa é outra: em cenários como `revenue_by_city_and_category` e `users_above_avg_spending`, a API declarativa do Prisma não expressa a agregação composta (somas de produtos, médias de somas, contagens distintas), de modo que o caminho idiomático recupera **todos** os registros pertinentes (dezenas de milhares de linhas) e realiza a agregação em JavaScript, em vez de delegá-la ao banco. Sob concorrência, esse processamento na aplicação — somado à serialização do grande volume de dados — satura o laço de eventos, produzindo a latência de mais de 11 segundos observada a 100 VUs. É um mecanismo distinto, porém complementar, do clássico anti-padrão de decomposição em *N* consultas relatado na literatura, em que um ORM chega a emitir mais de mil consultas onde o SQL emprega uma (COLLEY; STANIER; ASADUZZAMAN, 2020).
 
-O Quadro 1 evidencia esse mecanismo no cenário `users_above_avg_spending`. O SQL puro e o Drizzle emitem uma única consulta na qual a agregação composta (`SUM`, `AVG`, `HAVING`) e o recorte (`ORDER BY ... LIMIT 50`) são resolvidos pelo banco; o plano correspondente combina um `HashAggregate` com um `top-N heapsort` e **devolve apenas 50 linhas** à aplicação, em 39,5 ms de execução no banco. O Prisma idiomático, por não dispor de API declarativa para essa agregação, emite uma primeira consulta sem qualquer `SUM` ou `GROUP BY`, que materializa **as 46.018 linhas** de itens (plano `Nested Loop Left Join`), e uma segunda consulta apenas para recuperar os nomes dos 50 usuários já selecionados em JavaScript. A varredura em si custa modestos 27 ms no banco, mas é a transferência e a agregação desse volume na aplicação que, sob concorrência, produzem a latência de p50 superior a 11 s observada a 100 VUs.
+O Quadro 1 evidencia esse mecanismo no cenário `users_above_avg_spending`. O SQL puro e o Drizzle emitem uma única consulta na qual a agregação composta (`SUM`, `AVG`, `HAVING`) e o recorte (`ORDER BY ... LIMIT 50`) são resolvidos pelo banco; o plano correspondente combina um `HashAggregate` com um `top-N heapsort` e **devolve apenas 50 linhas** à aplicação, em 38,1 ms de execução no banco. O Prisma idiomático, por não dispor de API declarativa para essa agregação, emite uma primeira consulta sem qualquer `SUM` ou `GROUP BY`, que materializa **as 46.018 linhas** de itens (plano `Nested Loop Left Join`), e uma segunda consulta apenas para recuperar os nomes dos 50 usuários já selecionados em JavaScript. A varredura em si custa modestos 27 ms no banco, mas é a transferência e a agregação desse volume na aplicação que, sob concorrência, produzem a latência de p50 de cerca de 5 s observada a 100 VUs.
 
 **Quadro 1 – SQL emitido em `users_above_avg_spending`: agregação no banco (SQL/Drizzle) vs. materialização em JavaScript (Prisma)**
 
@@ -256,47 +278,27 @@ SELECT t0.id, t0.name FROM users AS t0 WHERE t0.id IN ($1, ..., $50);
 
 Fonte: elaboração própria, a partir de `results/explain/{sql,drizzle,prisma}_users_above_avg_spending.md`.
 
-Esse anti-padrão de decomposição manifesta-se justamente na variante `prisma-query`, que emite 7 consultas em `revenue_by_city_and_category` e 3 em `eager_join` e `recent_carts_7d`, onde as demais estratégias empregam uma só.
-
-### 5.4. Efeito do modo de carregamento de relações
-
-A comparação entre o Prisma idiomático (`prisma`, modo `join`) e sua variante legada (`prisma-query`, modo `query`) revela um **cruzamento dependente da carga**, sintetizado na Tabela 6. Em isolamento (1 VU), o modo `query` — que dispara *N* consultas simples — chega a ser **mais rápido** que o *LATERAL JOIN* (0,59× em `recent_carts_7d`; 0,64× em `eager_join`), pois várias consultas leves podem custar menos que uma junção lateral em baixa cardinalidade. Sob 100 VUs, entretanto, a relação se inverte: o modo `query` torna-se de 32% a 52% mais lento, à medida que o custo de *N* idas ao banco se amplifica com a concorrência.
-
-**Tabela 6 – Modo `join` (relationJoins) vs. modo `query` no Prisma — razão `query`/`join` do p50**
-
-| Cenário | `join` p50 isolado (ms) | `query` p50 isolado (ms) | razão @ 1 VU | razão @ 100 VU |
-|---|---|---|---|---|
-| cart_detail | 0,276 | 0,368 | 1,29× | 1,52× |
-| eager_join | 3,773 | 2,424 | 0,64× | 1,45× |
-| revenue_by_city_and_category | 314,1 | 263,9 | 0,84× | 1,40× |
-| recent_carts_7d | 3,644 | 2,128 | 0,59× | 1,40× |
-| frequently_bought_together | 0,948 | 1,071 | 1,15× | 1,32× |
-
-Fonte: elaboração própria.
-
-A implicação prática é que o carregamento por *LATERAL JOIN*, padrão da *preview feature* `relationJoins`, é a escolha adequada para cargas concorrentes, embora possa parecer desvantajoso em medições isoladas — um exemplo de como conclusões obtidas sem concorrência podem não se sustentar em produção.
-
-### 5.5. Ameaças à validade
+### 5.4. Ameaças à validade
 
 Algumas ameaças à validade devem ser consideradas na interpretação dos resultados.
 
-**Pareamento de parâmetros sob carga.** No `bench.js`, os parâmetros de cada cenário são gerados de forma determinística; sob o k6, embora a semente do gerador seja fixada na inicialização do servidor, a ordem de chegada das requisições com usuários virtuais concorrentes é não-determinística, impossibilitando o pareamento exato requisição a requisição entre estratégias. Como a métrica reportada é a mediana sobre milhares de requisições em 30 segundos, eventuais assimetrias de sequência diluem-se na agregação.
+**Pareamento de parâmetros sob carga.** No `bench.js`, os parâmetros de cada cenário são gerados de forma determinística; sob o k6, embora a semente do gerador seja fixada na inicialização do servidor, a ordem de chegada das requisições com usuários virtuais concorrentes é não-determinística, impossibilitando o pareamento exato requisição a requisição entre abordagens. Como a métrica reportada é a mediana sobre milhares de requisições em 30 segundos, eventuais assimetrias de sequência diluem-se na agregação.
 
 **Dependência temporal.** O cenário `recent_carts_7d` filtra registros dos últimos sete dias relativamente ao instante de execução; como as datas dos dados sintéticos são ancoradas no momento da geração, o *snapshot* foi regenerado imediatamente antes da matriz, garantindo que a janela contivesse dados representativos.
 
-**Execução em máquina única.** Cliente (k6) e servidor compartilham a mesma máquina, o que pode introduzir contenção entre o gerador de carga e a aplicação sob 100 VUs. Optou-se por essa configuração para eliminar a variabilidade de rede; ademais, como a métrica primária é a razão entre estratégias — todas sujeitas à mesma contenção —, o viés afeta o numerador e o denominador de forma comparável.
+**Execução em máquina única.** Cliente (k6) e servidor compartilham a mesma máquina, o que pode introduzir contenção entre o gerador de carga e a aplicação sob 100 VUs. Optou-se por essa configuração para eliminar a variabilidade de rede; ademais, como a métrica primária é a razão entre abordagens — todas sujeitas à mesma contenção —, o viés afeta o numerador e o denominador de forma comparável.
 
 **Artefato no health-check.** Uma única célula (`prisma`/`revenue_by_city_and_category`/100 VUs) acusou violação do limiar de erro, porém com **taxa de falha real nula**: a latência da ordem de 11 segundos faz com que pouquíssimas iterações se completem na janela de 30 segundos, tornando a métrica de taxa de erro estatisticamente frágil em uma das réplicas. Trata-se de consequência da própria lentidão do Prisma nesse cenário — um achado — e não de defeito do procedimento.
 
-**Generalização.** Avaliou-se uma versão de cada ferramenta sobre o PostgreSQL e o Node.js; resultados podem variar com outras versões, bancos ou cargas. Como o Drizzle é uma das abstrações mais leves (um *query builder* sem mapeamento de entidades), sua sobrecarga pode ser lida como um **limite inferior** para o overhead de ORMs em geral; e o Prisma foi avaliado em seu uso idiomático, representando a prática recomendada pela ferramenta. Por fim, a concordância entre as medições isoladas (`bench`) e sob 1 VU (k6) reforça a validade interna do procedimento de isolamento de processo.
+**Generalização.** Avaliou-se uma versão de cada ferramenta sobre o PostgreSQL e o Node.js; resultados podem variar com outras versões, bancos ou cargas. Como o Drizzle é uma das abstrações mais leves (um *query builder* sem mapeamento de entidades), sua sobrecarga pode ser lida como um **limite inferior** para a de ORMs em geral; e o Prisma foi avaliado em seu uso idiomático, representando a prática recomendada pela ferramenta. Por fim, a concordância entre as medições isoladas (`bench`) e sob 1 VU (k6) reforça a validade interna do procedimento de isolamento de processo.
 
 ## 6. Conclusões
 
-Este trabalho investigou o custo de desempenho de utilizar um ORM em vez de SQL puro em consultas SELECT no PostgreSQL e como esse custo varia conforme a classe da consulta e a carga concorrente. A principal decisão metodológica — submeter todas as estratégias ao mesmo *driver* (`pg`) — permitiu isolar a camada de abstração e atribuir a ela, e não ao driver, as diferenças observadas; e a combinação de três camadas de medição com a análise de planos de execução possibilitou não apenas quantificar, mas explicar a sobrecarga.
+Mediar o acesso a dados por um ORM tem um preço em desempenho que, na literatura, costuma ser reportado como um número único e sem explicação causal. Este trabalho analisou esse desempenho de forma controlada — comparando SQL puro, Drizzle e Prisma em consultas SELECT no PostgreSQL — e, mais do que quantificar a sobrecarga, buscou identificar de que ela depende: a classe da consulta e a carga concorrente. A principal decisão metodológica — submeter todas as abordagens ao mesmo *driver* (`pg`) — permitiu isolar a camada de abstração e atribuir a ela, e não ao driver, as diferenças observadas; e a combinação de três camadas de medição com a análise de planos de execução possibilitou não apenas quantificar, mas explicar a sobrecarga.
 
-Os resultados confirmam e refinam a hipótese inicial: **a sobrecarga do ORM depende tanto da classe da consulta quanto do idioma da ferramenta**. O Drizzle, um *query builder* que emite SQL equivalente ao manual, apresenta sobrecarga modesta e, sobretudo, desprezível nas consultas analíticas mesmo sob carga máxima (1,17× em média a 100 VUs), pois delega a computação ao banco. O Prisma, em sua forma idiomática, inverte essa propriedade: por materializar o grafo de objetos e realizar agregações na própria aplicação, amplifica drasticamente sob carga, alcançando 12 a 14 vezes a latência do SQL puro em consultas analíticas a 100 usuários simultâneos. A análise dos planos de execução revelou que essa degradação tem duas origens distintas — o processamento de agregações em memória, no caso idiomático, e a decomposição de uma operação em múltiplas consultas, no modo de carregamento legado. Observou-se ainda que o ORM **não corrige** anti-padrões como o N+1, mas os agrava, e que o carregamento de relações por *LATERAL JOIN* (padrão da *preview feature* `relationJoins`) é vantajoso sob carga, ainda que possa parecer custoso em medições isoladas.
+Os resultados confirmam e refinam a hipótese inicial: **a sobrecarga do ORM depende tanto da classe da consulta quanto do idioma da ferramenta**. O Drizzle, um *query builder* que emite SQL equivalente ao manual, apresenta sobrecarga modesta e, sobretudo, desprezível nas consultas analíticas mesmo sob carga máxima (1,29× em média a 100 VUs), pois delega a computação ao banco. O Prisma, em sua forma idiomática, inverte essa propriedade: por materializar o grafo de objetos e realizar agregações na própria aplicação, amplifica drasticamente sob carga, alcançando 12 a 14 vezes a latência do SQL puro em consultas analíticas a 100 usuários simultâneos. A análise dos planos de execução revelou a origem dessa degradação: o processamento de agregações em memória, na própria aplicação, em vez de no banco. Observou-se ainda que o ORM **não corrige** anti-padrões como o N+1, mas os agrava.
 
-Desses achados decorrem recomendações práticas. A conveniência do ORM custa mais caro justamente onde tende a ser mais necessária — em consultas analíticas sob alta concorrência —, de modo que aplicações sensíveis a desempenho nesse perfil beneficiam-se de um *query builder* ou de SQL puro para suas consultas críticas. Ao se optar por um ORM completo, convém preferir o carregamento por junção para cargas concorrentes e evitar delegar à aplicação agregações que o banco realiza de forma muito mais eficiente. Como o Drizzle representa uma das abstrações mais leves, sua sobrecarga pode ser interpretada como um limite inferior para o custo de ORMs em geral.
+Desses achados decorrem recomendações práticas. A conveniência do ORM custa mais caro justamente onde tende a ser mais necessária — em consultas analíticas sob alta concorrência —, de modo que aplicações sensíveis a desempenho nesse perfil beneficiam-se de um *query builder* ou de SQL puro para suas consultas críticas, evitando delegar à aplicação agregações que o banco realiza de forma muito mais eficiente. Como o Drizzle representa uma das abstrações mais leves, sua sobrecarga pode ser interpretada como um limite inferior para o custo de ORMs em geral.
 
 Como trabalhos futuros, pretende-se estender a avaliação a outras versões e a outros SGBDs, incorporar operações de escrita em análise dedicada, aprofundar a inspeção de consumo de *buffers* e de E/S, e contemplar a dimensão qualitativa da experiência de desenvolvimento e da manutenibilidade, que pondera, do outro lado da balança, os benefícios que justificam a adoção dos ORMs (YUSMITA et al., 2025).
 
@@ -307,6 +309,8 @@ BEYER, Dirk; LÖWE, Stefan; WENDLER, Philipp. Reliable benchmarking: requirement
 COLLEY, Derek; STANIER, Clare; ASADUZZAMAN, Md. Investigating the Effects of Object-Relational Impedance Mismatch on the Efficiency of Object-Relational Mapping Frameworks. **Journal of Database Management**, v. 31, n. 4, p. 1–23, 2020.
 
 COUTO, Herderson; SILVA, Francisco Airton; CALLOU, Gustavo; ANDRADE, Ermeson. Uma Abordagem Experimental para Avaliar o Desempenho do Banco de Dados Open-Source PostgreSQL. In: ESCOLA REGIONAL DE INFORMÁTICA DE GOIÁS, 10., 2022. **Anais [...]**. Porto Alegre: SBC, 2022. p. 12-23. DOI: https://doi.org/10.5753/erigo.2022.227314.
+
+DRIZZLE TEAM. **Drizzle ORM Documentation**. 2025. Disponível em: https://orm.drizzle.team/docs/overview. Acesso em: jun. 2026.
 
 GRAFANA LABS. **k6: a modern load testing tool**. 2026. Disponível em: https://grafana.com/docs/k6/. Acesso em: jun. 2026.
 
@@ -321,6 +325,8 @@ NICOLETTI, Maria do Carmo; MARÇAL, Denilson Silva. Mapeamento Objeto-Relacional
 OLIVEIRA, Eduardo Aparecido de; SOUZA, Vinicius Aparecido De; JUNGERS, Vinicius Cardoso; CODO, Fabio. Comparação de Desempenho entre os ORMs TypeORM, Prisma e Sequelize em Aplicações Node.js. **Revista e-F@tec**, v. 14, n. 2, 2024.
 
 POSTGRESQL GLOBAL DEVELOPMENT GROUP. **PostgreSQL 17 Documentation**. 2024. Disponível em: https://www.postgresql.org/docs/17/. Acesso em: jun. 2026.
+
+PRISMA. **Prisma ORM Documentation**. 2025. Disponível em: https://www.prisma.io/docs/orm. Acesso em: jun. 2026.
 
 TEIXEIRA, Marcelo Heitor. Impedância objeto relacional: o atrito natural entre os dois mundos. **Tecnologia em Projeção**, v. 8, n. 1, p. 11–20, 2017.
 
@@ -341,7 +347,7 @@ npm run seed            # popula o banco via faker (seed = 12345)
 npm run db:snapshot     # exporta o snapshot CSV para reset rápido
 ```
 
-**Execução da matriz completa** (4 estratégias × 10 cenários × 3 níveis de VU × 3 réplicas = 360 execuções de carga, mais a latência isolada e os planos; ~3h não assistidas):
+**Execução da matriz completa** (3 abordagens × 10 cenários × 3 níveis de VU × 3 réplicas = 270 execuções de carga, mais a latência isolada e os planos; ~3h não assistidas):
 
 ```bash
 npm run db:reset-fast && \

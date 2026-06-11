@@ -10,14 +10,12 @@ const { scenarios, seedScenarioParams } = await import('./src/scenarios.js')
 const { sqlStrategy }         = await import('./src/strategies/sql.js')
 const { drizzleStrategy }     = await import('./src/strategies/drizzle.js')
 const { prismaStrategy }      = await import('./src/strategies/prisma.js')
-const { prismaQueryStrategy } = await import('./src/strategies/prisma-query.js')
 const { resetFast }           = await import('./src/db/snapshot.js')
 
 const STRATEGIES = {
   sql:            sqlStrategy,
   drizzle:        drizzleStrategy,
   prisma:         prismaStrategy,
-  'prisma-query': prismaQueryStrategy,
 }
 
 mkdirSync('results/explain', { recursive: true })

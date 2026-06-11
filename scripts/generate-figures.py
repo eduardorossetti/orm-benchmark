@@ -134,7 +134,7 @@ def fig_escalonamento():
 
     ML, MR, MT, MB = 78, 250, 64, 64
     PW, PH = W - ML - MR, H - MT - MB
-    ymin, ymax = 1.0, 4.7
+    ymin, ymax = 1.0, 5.2
     py = lambda v: MT + PH - (v - ymin) / (ymax - ymin) * PH
     px = lambda i: ML + (i + 0.5) / len(VUS) * PW
 

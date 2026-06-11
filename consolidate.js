@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'
 
-const STRATEGIES = ['sql', 'drizzle', 'prisma', 'prisma-query']
+const STRATEGIES = ['sql', 'drizzle', 'prisma']
 const SCENARIOS = [
   'select_by_id', 'cart_detail',
   'n_plus_one', 'eager_join',
@@ -258,44 +258,6 @@ for (const cat of categories) {
   const benchRatios = scens.map(s => ratio(bench.prisma?.scenarios?.[s]?.median, bench.sql?.scenarios?.[s]?.median))
   const k6Ratios = (vus) => scens.map(s => ratio(k6.prisma?.[s]?.[vus]?.p50, k6.sql?.[s]?.[vus]?.p50))
   md += `| ${cat} | ${fmtRatio(geomean(benchRatios))} | ${fmtRatio(geomean(k6Ratios(1)))} | ${fmtRatio(geomean(k6Ratios(10)))} | ${fmtRatio(geomean(k6Ratios(100)))} |\n`
-}
-
-md += `\n## 4. Efeito da preview feature \`relationJoins\` (Prisma \`join\` vs \`query\`)\n\n`
-md += `Comparação entre Prisma idiomático (default \`join\` = LATERAL JOIN, com \`previewFeatures = ["relationJoins"]\`) e a variante \`prisma-query\` que força \`relationLoadStrategy: 'query'\` (N queries por relação, modo legado).\n\n`
-const relJoinScens = SCENARIOS.filter(s => {
-  const a = explain.prisma?.[s]?.queries
-  const b = explain['prisma-query']?.[s]?.queries
-  return a != null && b != null && a !== b
-})
-const passthroughScens = SCENARIOS.filter(s => !relJoinScens.includes(s))
-if (relJoinScens.length === 0) {
-  md += `_Sem cenários divergentes detectados via EXPLAIN — pulando seção._\n\n`
-} else {
-  md += `**${relJoinScens.length} cenários afetados** (divergem em nº de queries no EXPLAIN): ${relJoinScens.join(', ')}.\n`
-  md += `**${passthroughScens.length} cenários passthrough** (variante herda do \`prisma\`, sem divergência): ${passthroughScens.join(', ')}.\n\n`
-
-  md += `### Bench (200 iter, 50 warmup)\n\n`
-  md += `| cenário | category | Prisma \`join\` p50 | Prisma \`query\` p50 | query/join | queries (join) | queries (query) |\n`
-  md += `|---|---|---|---|---|---|---|\n`
-  for (const scen of relJoinScens) {
-    const j = bench.prisma?.scenarios?.[scen]
-    const q = bench['prisma-query']?.scenarios?.[scen]
-    const ej = explain.prisma?.[scen]?.queries
-    const eq = explain['prisma-query']?.[scen]?.queries
-    md += `| ${scen} | ${SCENARIO_CATEGORY[scen]} | ${cell(fmt(j?.median, 3))} | ${cell(fmt(q?.median, 3))} | ${fmtRatio(ratio(q?.median, j?.median))} | ${cell(ej)} | ${cell(eq)} |\n`
-  }
-
-  for (const vus of VUS_LEVELS) {
-    md += `\n### k6 @ VU = ${vus}\n\n`
-    md += `| cenário | category | Prisma \`join\` p50 | Prisma \`query\` p50 | query/join | \`join\` rps | \`query\` rps |\n`
-    md += `|---|---|---|---|---|---|---|\n`
-    for (const scen of relJoinScens) {
-      const j = k6.prisma?.[scen]?.[vus]
-      const q = k6['prisma-query']?.[scen]?.[vus]
-      md += `| ${scen} | ${SCENARIO_CATEGORY[scen]} | ${cell(fmt(j?.p50))} | ${cell(fmt(q?.p50))} | ${fmtRatio(ratio(q?.p50, j?.p50))} | ${cell(fmt0(j?.rps))} | ${cell(fmt0(q?.rps))} |\n`
-    }
-  }
-  md += `\n`
 }
 
 md += `\n## Health-check dos runs k6\n\n`

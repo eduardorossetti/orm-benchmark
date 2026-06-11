@@ -6,7 +6,7 @@ const STRATEGY = __ENV.STRATEGY
 const SCENARIO = __ENV.SCENARIO
 const VUS      = Number(__ENV.VUS ?? 10)
 const DURATION = __ENV.DURATION ?? '30s'
-const BASE_URL = __ENV.BASE_URL ?? 'http://localhost:3000'
+const BASE_URL = __ENV.BASE_URL ?? 'http://localhost:3004'
 
 if (!STRATEGY || !SCENARIO) {
   throw new Error('STRATEGY e SCENARIO são obrigatórios. Ex: STRATEGY=sql SCENARIO=select_by_id k6 run k6/load.js')

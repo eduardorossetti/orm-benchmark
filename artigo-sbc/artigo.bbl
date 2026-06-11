@@ -1,0 +1,90 @@
+\begin{thebibliography}{}
+
+\bibitem[Beyer et~al. 2017]{beyer2017}
+Beyer, D., L{\"o}we, S., and Wendler, P. (2017).
+\newblock Reliable benchmarking: requirements and solutions.
+\newblock {\em International Journal on Software Tools for Technology
+  Transfer}, 21(1):1--29.
+
+\bibitem[Colley et~al. 2020]{colley2020}
+Colley, D., Stanier, C., and Asaduzzaman, M. (2020).
+\newblock Investigating the effects of object-relational impedance mismatch on
+  the efficiency of object-relational mapping frameworks.
+\newblock {\em Journal of Database Management}, 31(4):1--23.
+
+\bibitem[Couto et~al. 2022]{couto2022}
+Couto, H., Silva, F.~A., Callou, G., and Andrade, E. (2022).
+\newblock Uma abordagem experimental para avaliar o desempenho do banco de
+  dados open-source postgresql.
+\newblock In {\em Anais da X Escola Regional de Inform{\'a}tica de Goi{\'a}s
+  (ERI-GO)}, pages 12--23, Porto Alegre. SBC.
+
+\bibitem[{Drizzle Team} 2025]{drizzle2025}
+{Drizzle Team} (2025).
+\newblock Drizzle orm documentation.
+\newblock \url{https://orm.drizzle.team/docs/overview}.
+\newblock Acesso em: jun. 2026.
+
+\bibitem[{Grafana Labs} 2026]{k6}
+{Grafana Labs} (2026).
+\newblock k6: a modern load testing tool.
+\newblock \url{https://grafana.com/docs/k6/}.
+\newblock Acesso em: jun. 2026.
+
+\bibitem[Hasselbring 2021]{hasselbring2021}
+Hasselbring, W. (2021).
+\newblock Benchmarking as empirical standard in software engineering research.
+\newblock In {\em Proceedings of the Evaluation and Assessment in Software
+  Engineering (EASE 2021)}, pages 365--372, New York. ACM.
+
+\bibitem[Ireland et~al. 2009]{ireland2009}
+Ireland, C., Bowers, D., Newton, M., and Waugh, K. (2009).
+\newblock A classification of object-relational impedance mismatch.
+\newblock In {\em Proceedings of the First International Conference on Advances
+  in Databases, Knowledge, and Data Applications (DBKDA)}, pages 36--43. IEEE.
+
+\bibitem[Kalibera and Jones 2013]{kalibera2013}
+Kalibera, T. and Jones, R. (2013).
+\newblock Rigorous benchmarking in reasonable time.
+\newblock In {\em Proceedings of the International Symposium on Memory
+  Management (ISMM '13)}, pages 63--74, New York. ACM.
+
+\bibitem[Nicoletti and Mar{\c{c}}al 2024]{nicoletti2024}
+Nicoletti, M. d.~C. and Mar{\c{c}}al, D.~S. (2024).
+\newblock Mapeamento objeto-relacional -- considera{\c{c}}{\~o}es sobre a
+  ferramenta ponte entre programa{\c{c}}{\~a}o orientada a objetos e base de
+  dados relacional.
+\newblock {\em Anais do WCF}, 11:17--22.
+
+\bibitem[Oliveira et~al. 2024]{oliveira2024}
+Oliveira, E. A.~d., Souza, V. A.~D., Jungers, V.~C., and Codo, F. (2024).
+\newblock Compara{\c{c}}{\~a}o de desempenho entre os orms typeorm, prisma e
+  sequelize em aplica{\c{c}}{\~o}es node.js.
+\newblock {\em Revista e-F@tec}, 14(2).
+
+\bibitem[{PostgreSQL Global Development Group} 2024]{postgresql}
+{PostgreSQL Global Development Group} (2024).
+\newblock Postgresql 17 documentation.
+\newblock \url{https://www.postgresql.org/docs/17/}.
+\newblock Acesso em: jun. 2026.
+
+\bibitem[{Prisma} 2025]{prisma2025}
+{Prisma} (2025).
+\newblock Prisma orm documentation.
+\newblock \url{https://www.prisma.io/docs/orm}.
+\newblock Acesso em: jun. 2026.
+
+\bibitem[Teixeira 2017]{teixeira2017}
+Teixeira, M.~H. (2017).
+\newblock Imped{\^a}ncia objeto relacional: o atrito natural entre os dois
+  mundos.
+\newblock {\em Tecnologia em Proje{\c{c}}{\~a}o}, 8(1):11--20.
+
+\bibitem[Yusmita et~al. 2025]{yusmita2025}
+Yusmita, J.~C., Arya, R., Wijaya, J.~M., Suryaningrum, K.~M., and Siswanto,
+  R.~R. (2025).
+\newblock Optimizing database access strategy: A performance analysis
+  comparison of raw sql and prisma orm.
+\newblock {\em Procedia Computer Science}, 269:1201--1210.
+
+\end{thebibliography}

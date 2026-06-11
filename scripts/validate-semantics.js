@@ -2,14 +2,12 @@ import { scenarios, seedScenarioParams } from '../src/scenarios.js'
 import { sqlStrategy }         from '../src/strategies/sql.js'
 import { drizzleStrategy }     from '../src/strategies/drizzle.js'
 import { prismaStrategy }      from '../src/strategies/prisma.js'
-import { prismaQueryStrategy } from '../src/strategies/prisma-query.js'
 import { resetFast }           from '../src/db/snapshot.js'
 
 const STRATS = {
   sql:            sqlStrategy,
   drizzle:        drizzleStrategy,
   prisma:         prismaStrategy,
-  'prisma-query': prismaQueryStrategy,
 }
 
 const TOL = 1e-4
@@ -47,7 +45,7 @@ const SHAPE = {
   },
   eager_join: {
     countNormalizer: (rows, sn) => {
-      if (sn === 'prisma' || sn === 'prisma-query') {
+      if (sn === 'prisma') {
         return rows.reduce((acc, c) => acc + (c.items?.length || 0), 0)
       }
       return rows.length
@@ -61,7 +59,7 @@ const SHAPE = {
   },
   recent_carts_7d: {
     countNormalizer: (rows, sn) => {
-      if (sn === 'prisma' || sn === 'prisma-query') {
+      if (sn === 'prisma') {
         return rows.reduce((acc, c) => acc + (c.items?.length || 0), 0)
       }
       return rows.length
